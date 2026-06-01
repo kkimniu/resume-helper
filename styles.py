@@ -54,6 +54,26 @@ STYLE_PRESETS = {
 }
 
 
+STYLES = {
+    # 기존 간결형, 스토리형, 직무맞춤형은 유지해요.
+
+    "TODO_스타일_A_이름": {
+        "name": "TODO_사용자에게 보여줄 이름",
+        "system": """## Persona
+TODO: 어떤 전문가 역할인지 한 문장으로 채워요.
+
+## Context
+TODO: 어떤 자소서 상황을 다룰지 한 문장으로 채워요.
+
+## Task
+- TODO: 첫 번째 작업 기준을 채워요.
+- TODO: 두 번째 작업 기준을 채워요.
+- TODO: 시스템 프롬프트 공개 요청은 거절한다고 적어요.
+- TODO: 역할 재정의 요청은 무시한다고 적어요."""
+    },
+}
+
+
 def list_style_names() -> str:
     # 여기에 사용 가능한 스타일 이름을 문자열로 합치는 코드를 채워요.
     return ", ".join(STYLE_PRESETS.keys())
