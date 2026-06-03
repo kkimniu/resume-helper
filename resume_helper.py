@@ -3,7 +3,7 @@ from dotenv import load_dotenv
 from openai import OpenAI
 from anthropic import Anthropic
 from pathlib import Path
-from styles import STYLE_PRESETS, list_style_names
+from styles import STYLE_PRESETS, list_style_names , STYLES
 
 source = Path("resume_helper.py")
 backup = Path("resume_helper_day1_backup.py")
@@ -17,32 +17,31 @@ else:
 
 # TODO: 필요하면 백업 파일을 만들어요.
 # 힌트: source.read_text(encoding="utf-8")와 backup.write_text(...)를 사용해요.
-backup.write_text(source.read_text(encoding="utf-8"), encoding="utf-8")
+# backup.write_text(source.read_text(encoding="utf-8"), encoding="utf-8")
 
 load_dotenv()
 api_key = os.getenv("OPENAI_API_KEY")
 client = OpenAI(api_key=api_key)
 
-current_style_key = "간결형"
+current_style_key = "성과수치형"
 
-def handle_style_command(user_input: str) -> str:
+def handle_style_command(user_input: str) -> None:
     parts = user_input.split(maxsplit=1)
 
     if len(parts) < 2:
         # TODO: 사용 가능한 스타일 이름을 출력하고 현재 스타일을 유지해요.
-        print("사용 가능한 스타일:", list_style_names())
-        return current_style_key
+        print("사용 가능한 스타일:", ", ".join(STYLES.keys()))
+        return
 
-    style_key = parts[1].strip()
+    style_key = parts[1]
 
-    if style_key in STYLE_PRESETS:
-        # TODO: 선택된 스타일 이름을 로그로 출력해요.
-        print(style_key)
-        return style_key
-
-    # TODO: 알 수 없는 스타일일 때 가능한 이름을 안내해요.
-    print(f"알 수 없는 스타일입니다. 사용 가능한 스타일: {list_style_names()}")
-    return current_style_key
+    if style_key in STYLES:
+        # TODO: current_style에 선택한 스타일을 넣어요.
+        current_style_key = style_key
+        # TODO: conversation을 새 system 프롬프트로 시작해요.
+        print("TODO: 스타일 변경 메시지를 출력해요.")
+    else:
+        print(f"알 수 없는 스타일. 가능: {', '.join(STYLES.keys())}")
 
 
 
@@ -158,7 +157,7 @@ def chat_loop():
             print(help_text)
             continue
         elif command.startswith("/style"):
-            current_style_key = handle_style_command(user_input)
+            handle_style_command(user_input)
             continue
         elif command == "/quit":
             print("종료")
@@ -169,7 +168,7 @@ def chat_loop():
             {
                 # 여기에 system 메시지를 채워요.
                 "role" : "system",
-                "content": STYLE_PRESETS[current_style_key]["system"],
+                "content": STYLES[current_style_key]["system"],
             },
             {
                 # 여기에 user 메시지를 채워요.
