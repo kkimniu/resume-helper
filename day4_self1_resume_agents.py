@@ -2,6 +2,7 @@ import os
 from dotenv import load_dotenv
 from agents import Agent
 from agents import Runner
+from agents import handoff
 import asyncio
 # TODO: Agents SDK에서 필요한 Agent와 Runner를 임포트해요.
 # 힌트: from agents import Agent, Runner
@@ -17,16 +18,31 @@ def check_env() -> None:
         print("OPENAI_API_KEY 로딩 확인")
     else:
         print("OPENAI_API_KEY를 .env에 먼저 넣어주세요")
+
 revise_agent = Agent(
     name="자소서_첨삭_Specialist",
     handoff_description=(
-        "Triage가 볼 첨삭 Agent 설명을 채워요. "
-        "STAR/PREP/CAR 기준으로 문장 개선을 요청할 때 사용한다고 적습니다."
+        "STAR, PREP, CAR 기준으로 자기소개서 문장을 개선하고 첨삭할 때 사용하는 전문가입니다."
     ),
-    instructions=""" 여기에 첨삭 역할 지시문을 작성해요.
-    6대 결함 패턴을 점검해요.
-    한 번에 완성본을 쓰기보다 개선 제안을 먼저 만들어요.
-    허위 경력 생성은 거절해요.
+    instructions="""
+        당신은 자기소개서 첨삭 전문가입니다.
+
+        첨삭 기준:
+        - STAR, PREP, CAR 구조를 활용하여 문장을 개선한다.
+        - 자기소개서의 6대 결함 패턴을 점검한다.
+        - 한 번에 완성본을 작성하지 않고 개선 제안을 우선 제공한다.
+        - 경험, 성과, 역량이 구체적으로 드러나도록 수정 방향을 제안한다.
+        - 허위 경력, 허위 성과, 존재하지 않는 경험은 생성하지 않는다.
+
+        출력 형식:
+        [문제점]
+        - 발견된 결함 및 개선이 필요한 부분
+
+        [개선 제안]
+        - 수정 방향 및 예시 문장
+
+        [첨삭 이유]
+        - 왜 수정이 필요한지 설명
     """,
     model=MODEL_NAME,
 )
@@ -57,22 +73,31 @@ analyze_agent = Agent(
     출력은 짧은 분석 요약과 결함 태그 중심으로 작성해요.
     """,
 )
+final_agent = Agent(
+    name="자소서_최종본_Specialist",
+    handoff_description=(
+        "첨삭 결과를 반영하여 제출용 자기소개서 최종 문단을 작성하는 전문가입니다."
+    ),
+    instructions="""
+        당신은 자기소개서 최종본 작성 전문가입니다.
 
-TEST_CASES = [
-    {
-        "label": "분석 요청",
-        "input": """
-        아래 자소서를 ResumeAnalysis 5필드 기준으로 분석해줘.
-        저는 팀 프로젝트에서 로그인 API 오류를 정리했고,
-        재발 방지를 위해 오류 메시지와 테스트 케이스를 문서화했습니다.
-        """,
-    },
-    {
-        "label": "범위 밖 요청",
-        # TODO: 자소서와 관련 없는 짧은 요청을 직접 작성해요.
-        "input": "오늘 서울 날씨 알려줘.",
-    },
-]
+        작성 기준:
+        - 첨삭 결과를 반영하여 자연스럽고 완성도 높은 자기소개서를 작성한다.
+        - NCS 직무 역량과 지원 직무 연관성을 강조한다.
+        - 블라인드 채용 기준을 준수한다.
+        - 과장된 경력이나 사실과 다른 내용은 작성하지 않는다.
+        - 이름, 나이, 성별, 출신지역, 가족관계 등 개인정보는 포함하지 않는다.
+
+        출력 형식:
+        [최종 문단]
+        - 제출 가능한 자기소개서 최종본
+
+        [수정 이유]
+        - 어떤 부분을 수정했는지 간단히 설명
+    """,
+    model=MODEL_NAME,
+)
+
 triage_agent = Agent(
     name="ResumeTriageAgent",
     instructions="""
@@ -89,6 +114,37 @@ triage_agent = Agent(
         # 힌트: analyze_agent
         analyze_agent
     ],
+)
+
+TEST_CASES = [
+    {
+        "label": "분석 요청",
+        "input": """
+        아래 자소서를 ResumeAnalysis 5필드 기준으로 분석해줘.
+        저는 팀 프로젝트에서 로그인 API 오류를 정리했고,
+        재발 방지를 위해 오류 메시지와 테스트 케이스를 문서화했습니다.
+        """,
+    },
+    {
+        "label": "범위 밖 요청",
+        # TODO: 자소서와 관련 없는 짧은 요청을 직접 작성해요.
+        "input": "오늘 서울 날씨 알려줘.",
+    },
+]
+
+analyze_handoff = handoff(
+    agent=analyze_agent,
+    # TODO: 필요하면 tool_description_override에 분석 요청 설명을 넣어요.
+)
+
+revise_handoff = handoff(
+    agent=revise_agent,
+    # TODO: 필요하면 tool_description_override에 첨삭 요청 설명을 넣어요.
+)
+
+final_handoff = handoff(
+    agent=final_agent,
+    # TODO: 필요하면 tool_description_override에 최종본 요청 설명을 넣어요.
 )
 
 async def run_case(label: str, user_input: str) -> None:
