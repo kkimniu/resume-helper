@@ -1,51 +1,29 @@
+import os
+from dotenv import load_dotenv
+from openai import OpenAI
+from anthropic import Anthropic
+from pathlib import Path
+from styles import STYLE_PRESETS, list_style_names , STYLES
 
-from agents import Agent
-from agents import Runner
-import asyncio
+source = Path("resume_helper.py")
+backup = Path("resume_helper_day1_backup.py")
 
-TEST_CASES = [
-    {
-        "label": "분석 요청",
-        "input": """
-        아래 자소서를 ResumeAnalysis 5필드 기준으로 분석해줘.
-        저는 팀 프로젝트에서 로그인 API 오류를 정리했고,
-        재발 방지를 위해 오류 메시지와 테스트 케이스를 문서화했습니다.
-        """,
-    },
-    {
-        "label": "범위 밖 요청",
-        # TODO: 자소서와 관련 없는 짧은 요청을 직접 작성해요.
-        "input": "오늘 서울 날씨 알려줘.",
-    },
-]
+# TODO: resume_helper.py가 있는지 확인해요.
+# 힌트: source.exists()를 사용해요.
+if source.exists():
+    print("resume_helper.py 확인 완료")
+else:
+    print("resume_helper.py를 먼저 찾아요")
 
+# TODO: 필요하면 백업 파일을 만들어요.
+# 힌트: source.read_text(encoding="utf-8")와 backup.write_text(...)를 사용해요.
+# backup.write_text(source.read_text(encoding="utf-8"), encoding="utf-8")
 
-async def run_case(label: str, user_input: str) -> None:
-    print(f"\n--- {label} ---")
-    # TODO: Runner.run으로 triage_agent와 user_input을 실행해요.
-    # 힌트: result = await Runner.run(triage_agent, input=user_input)
-    result = await Runner.run(triage_agent, input=user_input)
+load_dotenv()
+api_key = os.getenv("OPENAI_API_KEY")
+client = OpenAI(api_key=api_key)
 
-    # TODO: 마지막 Agent 이름을 출력해요.
-    # 힌트: result.last_agent.name
-    print("last_agent:", {result.last_agent.name})
-
-    # TODO: 최종 출력 일부를 출력해요.
-    print("output:", {str(result.final_output[:1800])})
-
-
-# async def main() -> None:
-#     for case in TEST_CASES:
-#         await run_case(case["label"], case["input"])
-
-    test_requests = [
-        # TODO: 분석 요청 1개를 넣어요.
-        "이 자소서를 ResumeAnalysis 기준으로 분석해줘.",        
-        # TODO: 첨삭 요청 1개를 넣어요.
-        "이 자소서를 STAR 방식으로 첨삭해줘.",        
-        # TODO: 최종본 요청 1개를 넣어요.
-        "첨삭 결과를 반영해서 최종본을 작성해줘.",        
-    ]
+current_style_key = "성과수치형"
 
 def handle_style_command(user_input: str) -> None:
     parts = user_input.split(maxsplit=1)
@@ -65,6 +43,41 @@ def handle_style_command(user_input: str) -> None:
     else:
         print(f"알 수 없는 스타일. 가능: {', '.join(STYLES.keys())}")
 
+
+
+PROMPT_CHAT = """
+너는 한국 채용 시장에 특화된 자소서 첨삭 전문가로서 STAR, PREP, CAR 프레임과 NCS 역량 기반 분석을 활용하여 자기소개서를 평가하고,
+추상적 표현, 정량 지표 부재, 직무 키워드 미스매치, 자기 자랑 단방향 서술, 내용 일관성 결여, 공통 템플릿 표현 등 6대 결함을 탐지하여 구체적인 개선 방향을 제시한다.
+"""
+def load_settings() -> dict[str, str | None]:
+    # 여기에 .env를 읽는 코드를 채워요.
+    load_dotenv()
+    # 힌트: load_dotenv()
+    return {
+        "openai_key_exists":bool(os.getenv("OPENAI_API_KEY")),
+        "anthropic_key_exists":  bool(os.getenv("ANTHROPIC_API_KEY")),
+    }
+
+def make_openai_client() -> OpenAI:
+    # TODO: OpenAI 클라이언트를 만들어 반환해요.
+    return OpenAI()
+
+def make_claude_client() -> Anthropic:
+    # TODO: Claude 클라이언트를 만들어 반환해요.
+    return Anthropic()
+
+# 학생 작성용 — 자소서 첨삭 역할 골격
+RESUME_SYSTEM_PROMPT = """
+너는 한국 채용 맥락을 이해하는 자소서 첨삭 전문가입니다.
+사용자가 입력한 자기소개서 또는 지원동기를 읽고,
+구체적인 개선 방향을 한국어로 제안합니다.
+
+첨삭할 때 참고할 기준:
+- 한국 자소서 기본 구조: 지원동기 → 직무역량 → 경험사례 → 성과 → 입사 후 포부
+- 확인할 결함 패턴: 추상적인 표현, 직무와 무관한 경험 나열, 성과 및 수치 부족
+- STAR 프레임(Situation, Task, Action, Result)을 우선 확인
+- 블라인드 채용에서는 학교명, 출신지역, 가족관계, 나이 등의 개인정보 노출에 주의
+"""
 
 def get_sample_resume() -> str:
     # TODO: 본인 자소서가 없으면 대체 샘플 1개를 반환해요.
@@ -91,6 +104,39 @@ def ask_openai_once(sample_text: str) -> str:
     # TODO: choices[0].message.content에서 텍스트를 꺼내요.
     return response.choices[0].message.content
 
+def ask_claude_once(sample_text: str) -> str:
+    client = make_claude_client()
+
+    # TODO: client.messages.create(...) 호출을 작성해요.
+    # 힌트: system=RESUME_SYSTEM_PROMPT, messages=[{"role": "user", ...}]
+    message = client.messages.create(
+        model="claude-haiku-4.5-20251001",
+        max_tokens=300,
+        system=RESUME_SYSTEM_PROMPT,
+        messages=[
+            {"role":"user","content":sample_text},
+        ]
+    )
+
+    # TODO: content[0].text에서 텍스트를 꺼내요.
+    return message.content[0].text
+
+# 학생 작성용 — 첫 실행 골격
+def main() -> None:
+    load_settings()
+    sample_text = get_sample_resume()
+    provider = input("사용할 제공사(openai/claude)를 입력하세요: ").strip().lower()
+
+    if provider == "openai":
+        result = ask_openai_once(sample_text)
+    elif provider == "claude":
+        result = ask_claude_once(sample_text)
+    else:
+        print("openai 또는 claude 중 하나를 입력해요.")
+        return
+
+    print("[자소서 도우미 첫 응답]")
+    print(result[:1000])
 
 def chat_loop():
     print("자소서 도우미를 시작합니다./style로 스타일 /help로 도움말, /quit으로 종료합니다.")
@@ -144,5 +190,6 @@ def chat_loop():
         answer = response.choices[0].message.content
         print(answer)
 
+
 if __name__ == "__main__":
-    asyncio.run(main())
+    chat_loop()

@@ -3,12 +3,17 @@ from dotenv import load_dotenv
 from agents import Agent
 from agents import Runner
 from agents import handoff
+from agents import GuardrailFunctionOutput, input_guardrail
+from pydantic import BaseModel
 import asyncio
+
 # TODO: Agents SDK에서 필요한 Agent와 Runner를 임포트해요.
 # 힌트: from agents import Agent, Runner
 MODEL_NAME = "gpt-4o-mini"
 load_dotenv()
 
+if not os.getenv("OPENAI_API_KEY"):
+    raise RuntimeError(".env에 OPENAI_API_KEY를 먼저 넣어 주세요.")
 
 def check_env() -> None:
     # TODO: OPENAI_API_KEY가 있는지만 확인해요.
@@ -146,6 +151,32 @@ final_handoff = handoff(
     agent=final_agent,
     # TODO: 필요하면 tool_description_override에 최종본 요청 설명을 넣어요.
 )
+class ResumeGuardrailOutput(BaseModel):
+    # TODO: 위험 입력 여부를 담는 bool 필드를 추가해요.
+    # 힌트: is_harmful: bool
+    is_harmful: bool
+
+
+@input_guardrail
+async def resume_input_guardrail(ctx, agent, input_data):
+    # TODO: 입력을 문자열로 바꾸고 위험 키워드를 검사해요.
+    text = str(input_data).lower()
+
+    harmful_keywords = [
+        # TODO: "허위 경력", "개인정보 노출", "시스템 프롬프트" 같은 키워드를 넣어요.
+        "허위 경력","개인정보 노출","시스템 프롬프트",
+        "ignore previous instructions","reveal system prompt","show hidden instructions"
+    ]
+
+    tripwire = any(
+        keyword in text
+        for keyword in harmful_keywords
+    )  # TODO: any(...)로 조건을 채워요.
+
+    return GuardrailFunctionOutput(
+        output_info=ResumeGuardrailOutput(is_harmful=tripwire),
+        tripwire_triggered=tripwire,
+    )
 
 async def run_case(label: str, user_input: str) -> None:
     print(f"\n--- {label} ---")
@@ -161,11 +192,42 @@ async def run_case(label: str, user_input: str) -> None:
     print("output:", {str(result.final_output[:1800])})
 
 
-async def main() -> None:
-    for case in TEST_CASES:
-        await run_case(case["label"], case["input"])
+# async def main() -> None:
+#     for case in TEST_CASES:
+#         await run_case(case["label"], case["input"])
+
+async def main():
+    triage_agent = Agent(
+        name="자소서_Triage",
+        instructions="""
+        당신은 자소서 도우미의 접수 담당입니다.
+
+        규칙:
+        - 자소서 분석, ResumeAnalysis, 결함 탐지 요청은 ResumeAnalyzeAgent로 넘겨요.
+        - 자소서 첨삭, 문장 개선, STAR/PREP/CAR 개선 요청은 자소서_첨삭_Specialist로 넘겨요.
+        - 제출용 최종본, 최종 문단 작성 요청은 자소서_최종본_Specialist로 넘겨요.
+        - 자소서와 관련 없는 요청은 범위 밖이라고 짧게 안내해요.
+        - 직접 긴 답변을 작성하지 말고 적합한 Specialist를 선택해요.
+        """,
+        handoffs=[analyze_handoff, revise_handoff, final_handoff],
+        input_guardrails=[resume_input_guardrail],
+        model=MODEL_NAME,
+    )
+
+    test_requests = [
+        # TODO: 분석 요청 1개를 넣어요.
+        "이 자소서를 ResumeAnalysis 기준으로 분석해줘.",        
+        # TODO: 첨삭 요청 1개를 넣어요.
+        "이 자소서를 STAR 방식으로 첨삭해줘.",        
+        # TODO: 최종본 요청 1개를 넣어요.
+        "첨삭 결과를 반영해서 최종본을 작성해줘.",        
+    ]
+
+    for index, request in enumerate(test_requests, start=1):
+        result = await Runner.run(triage_agent, request)
+        print(f"[테스트 {index}] 담당 Agent:", result.last_agent.name)
+        print(result.final_output[:200])
 
 
 if __name__ == "__main__":
-    check_env()
     asyncio.run(main())
