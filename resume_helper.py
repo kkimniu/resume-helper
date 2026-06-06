@@ -54,6 +54,7 @@ def show_styles() -> None:
 
 
 def change_style(user_input: str) -> None:
+    global current_style_key
     parts = user_input.split(maxsplit=1)
 
     if len(parts) < 2:

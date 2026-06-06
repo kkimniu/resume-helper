@@ -55,7 +55,7 @@ STYLE_PRESETS = {
 
 
 STYLES = {
-    # 기존 간결형, 스토리형, 직무맞춤형은 유지해요.
+    **STYLE_PRESETS,
 
     "성과수치형": {
         "name": "성과수치형",
@@ -91,7 +91,7 @@ STYLES["직무근거형"] = {
 
 def list_style_names() -> str:
     # 여기에 사용 가능한 스타일 이름을 문자열로 합치는 코드를 채워요.
-    return ", ".join(STYLE_PRESETS.keys())
+    return ", ".join(STYLES.keys())
 
 def print_available_styles() -> None:
     for key, value in STYLES.items():
