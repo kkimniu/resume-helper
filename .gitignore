@@ -1,7 +1,12 @@
 .env
 .venv/
 __pycache__/
+*.pyc
 chat_history.json
+*.txt
 resumes/
 outputs/*.json
+outputs/*.log
 analyze_result.json
+logs/
+submit_local/

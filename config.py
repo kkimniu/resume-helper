@@ -14,8 +14,5 @@ def ini_env() -> bool:
     print("환경 변수 확인 완료")
     return True
 
-# 모델명 함수
-MODEL_NAME = "gpt-5.4-nano"
-
 if __name__=="__main__":
     ini_env()

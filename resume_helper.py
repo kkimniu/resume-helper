@@ -211,5 +211,6 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    ini_env()    
+    if not ini_env():
+        sys.exit(1)  
     main()
