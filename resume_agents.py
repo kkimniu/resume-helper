@@ -37,8 +37,6 @@ revise_agent = Agent(
 
 analyze_agent = Agent(
     name="자소서_분석_Specialist",
-    # TODO: Triage가 이 Agent를 고를 때 참고할 설명을 채워요.
-    # 힌트: 자소서 분석, ResumeAnalysis 5필드, 6대 결함 탐지 요청
     handoff_description="자소서 분석, ResumeAnalysis 5필드, 6대 결함 탐지 요청",
     instructions="""
     당신은 자기소개서 분석 전문가입니다.
