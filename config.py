@@ -1,10 +1,10 @@
 import os
 from dotenv import load_dotenv
 
+load_dotenv()
 MODEL_NAME = "gpt-4o-mini"
 
 def ini_env() -> bool:
-    load_dotenv()
     required = ["OPENAI_API_KEY"]
     missing = [k for k in required if not os.getenv(k)]
     if missing:

@@ -1,148 +1,215 @@
 
-from agents import Agent
-from agents import Runner
+
 import asyncio
+import sys
 
-TEST_CASES = [
-    {
-        "label": "분석 요청",
-        "input": """
-        아래 자소서를 ResumeAnalysis 5필드 기준으로 분석해줘.
-        저는 팀 프로젝트에서 로그인 API 오류를 정리했고,
-        재발 방지를 위해 오류 메시지와 테스트 케이스를 문서화했습니다.
-        """,
-    },
-    {
-        "label": "범위 밖 요청",
-        # TODO: 자소서와 관련 없는 짧은 요청을 직접 작성해요.
-        "input": "오늘 서울 날씨 알려줘.",
-    },
-]
+from agents import InputGuardrailTripwireTriggered
+from agents import Runner
 
+from config import MODEL_NAME
+from config import ini_env
 
-async def run_case(label: str, user_input: str) -> None:
-    print(f"\n--- {label} ---")
-    # TODO: Runner.run으로 triage_agent와 user_input을 실행해요.
-    # 힌트: result = await Runner.run(triage_agent, input=user_input)
-    result = await Runner.run(triage_agent, input=user_input)
+from resume_agents import triage_agent
 
-    # TODO: 마지막 Agent 이름을 출력해요.
-    # 힌트: result.last_agent.name
-    print("last_agent:", {result.last_agent.name})
+from resume_tool import CHECK_ITEMS
+from resume_tool import analyze_resume
+from resume_tool import check_blind_risks
+from resume_tool import check_resume_ai_filter
+from resume_tool import format_blind_report
+from resume_tool import save_analysis
 
-    # TODO: 최종 출력 일부를 출력해요.
-    print("output:", {str(result.final_output[:1800])})
+from styles import STYLES
+from styles import list_style_names
+from styles import print_available_styles
+
+from openai import OpenAI
+
+client = OpenAI()
+current_style_key = "간결형"
 
 
-# async def main() -> None:
-#     for case in TEST_CASES:
-#         await run_case(case["label"], case["input"])
+COMMANDS = {
+    "/help": "사용 가능한 명령어를 보여줍니다.",
+    "/quit": "자소서 도우미를 종료합니다.",
+    "/style": "사용 가능한 스타일 목록을 보여줍니다.",
+    "/set": "스타일을 변경합니다. 예: /set 스토리형",
+    "/analyze": "로컬 규칙 기반으로 자소서를 분석합니다.",
+    "/agent": "Agent 라우팅으로 분석/첨삭/최종본을 처리합니다.",
+    "/filter": "AI 1차 필터 기준으로 자소서를 최종 점검합니다.",
+    "/blind": "블라인드 채용 위험 표현을 점검합니다.",
+}
 
-    test_requests = [
-        # TODO: 분석 요청 1개를 넣어요.
-        "이 자소서를 ResumeAnalysis 기준으로 분석해줘.",        
-        # TODO: 첨삭 요청 1개를 넣어요.
-        "이 자소서를 STAR 방식으로 첨삭해줘.",        
-        # TODO: 최종본 요청 1개를 넣어요.
-        "첨삭 결과를 반영해서 최종본을 작성해줘.",        
-    ]
 
-def handle_style_command(user_input: str) -> None:
+def show_help() -> None:
+    print("\n[사용 가능한 명령어]")
+    for command, description in COMMANDS.items():
+        print(f"{command:10s} - {description}")
+    print()
+
+
+def show_styles() -> None:
+    print("\n[사용 가능한 스타일]")
+    print_available_styles()
+    print(f"\n현재 스타일: {current_style_key}\n")
+
+
+def change_style(user_input: str) -> None:
     parts = user_input.split(maxsplit=1)
 
     if len(parts) < 2:
-        # TODO: 사용 가능한 스타일 이름을 출력하고 현재 스타일을 유지해요.
-        print("사용 가능한 스타일:", ", ".join(STYLES.keys()))
+        print("변경할 스타일 이름을 입력하세요.")
+        print(f"가능한 스타일: {list_style_names()}")
         return
 
-    style_key = parts[1]
+    style_key = parts[1].strip()
 
-    if style_key in STYLES:
-        # TODO: current_style에 선택한 스타일을 넣어요.
-        current_style_key = style_key
-        # TODO: conversation을 새 system 프롬프트로 시작해요.
-        print("TODO: 스타일 변경 메시지를 출력해요.")
-    else:
-        print(f"알 수 없는 스타일. 가능: {', '.join(STYLES.keys())}")
+    if style_key not in STYLES:
+        print(f"알 수 없는 스타일입니다. 가능: {list_style_names()}")
+        return
+
+    current_style_key = style_key
+    print(f"스타일이 '{style_key}'로 변경되었습니다.")
 
 
-def get_sample_resume() -> str:
-    # TODO: 본인 자소서가 없으면 대체 샘플 1개를 반환해요.
-    return """
-    저는 맡은 일을 열심히 하는 사람입니다.
-    백엔드 개발자로 성장하고 싶고, 프로젝트에서도 책임감 있게 참여했습니다.
-    입사 후 회사에 도움이 되는 개발자가 되겠습니다.
-    """
-# 학생 작성용 — OpenAI 첫 호출 골격
-def ask_openai_once(sample_text: str) -> str:
-    client = make_openai_client()
+def ask_openai_once(resume_text: str) -> str:
+    messages = [
+        {
+            "role": "system",
+            "content": STYLES[current_style_key]["system"],
+        },
+        {
+            "role": "user",
+            "content": resume_text,
+        },
+    ]
 
-    # TODO: client.chat.completions.create(...) 호출을 작성해요.
-    # 힌트: messages 배열에 system과 user를 넣어요.
-    
     response = client.chat.completions.create(
-        model="gpt-5.4-nano",
+        model=MODEL_NAME,
         max_completion_tokens=600,
-        messages=[
-            {"role":"system","content":RESUME_SYSTEM_PROMPT},
-            {"role":"user","content":sample_text},
-        ]
+        messages=messages,
     )
-    # TODO: choices[0].message.content에서 텍스트를 꺼내요.
+
     return response.choices[0].message.content
 
+def run_ai_filter() -> None:
+    resume_text = input("점검할 자소서 > ").strip()
 
-def chat_loop():
-    print("자소서 도우미를 시작합니다./style로 스타일 /help로 도움말, /quit으로 종료합니다.")
+    result = check_resume_ai_filter(
+        resume_text,
+        CHECK_ITEMS,
+    )
 
-    while True:
-        user_input = input("자소서 입력 > ")
-        command = user_input.strip()
-        # 여기에 /help 분기 코드를 채워요. (3단계)
-        # 여기에 /quit 분기 코드를 채워요. (4단계)
-        if command == "/help":
-            help_text = """
-                [사용 방법]
-                자소서 또는 지원동기를 입력하세요.
-                입력한 내용을 첨삭해 줍니다.
-                개인정보는 입력하지 마세요.
-                종료하려면 /quit 을 입력하세요.
-            """
-            print(help_text)
-            continue
-        elif command.startswith("/style"):
-            handle_style_command(user_input)
-            continue
-        elif command == "/quit":
-            print("종료")
-            break
-        # TODO: Chat Completions에 보낼 messages 배열을 만들어요.
-        # 힌트: system 역할과 user 역할을 모두 포함해야 해요.
-        messages = [
-            {
-                # 여기에 system 메시지를 채워요.
-                "role" : "system",
-                "content": STYLES[current_style_key]["system"],
-            },
-            {
-                # 여기에 user 메시지를 채워요.
-                "role" : "user",
-                "content":user_input,
-            }
-        ]
+    print("\n[AI 1차 필터 점검 결과]")
+    print(result)
 
-        # TODO: client.chat.completions.create(...) 호출을 채워요.
-        # 힌트: model, messages, max_completion_tokens를 넣어요.
-        response = client.chat.completions.create(
-            model="gpt-5.4-nano",
-            max_completion_tokens=600,
-            messages=messages
+
+def run_blind_check() -> None:
+    resume_text = input("점검할 자소서 > ").strip()
+
+    found = check_blind_risks(resume_text)
+    report = format_blind_report(found)
+
+    print("\n[블라인드 채용 점검 결과]")
+    print(report)
+    
+def run_local_analyze() -> None:
+    resume_text = input("자소서 원문 > ").strip()
+    keyword_text = input("NCS/JD 키워드, 쉼표 구분 > ").strip()
+
+    analysis = analyze_resume(resume_text, keyword_text)
+    save_analysis(analysis)
+
+    print("\n[분석 결과]")
+    print(analysis.model_dump())
+
+
+async def run_agent_command() -> None:
+    user_input = input("Agent에게 요청할 내용 > ").strip()
+
+    if not user_input:
+        print("요청 내용을 입력하세요.")
+        return
+
+    try:
+        result = await Runner.run(
+            triage_agent,
+            input=user_input,
         )
 
-        # TODO: 응답 텍스트만 꺼내 출력해요.
-        # 힌트: choices[0].message.content 경로를 사용해요.
-        answer = response.choices[0].message.content
-        print(answer)
+        print(f"\n[{result.last_agent.name}]")
+        print(result.final_output)
+
+    except InputGuardrailTripwireTriggered:
+        print("안전하지 않은 입력이 감지되었습니다.")
+        print("자소서 관련 요청을 다시 입력하세요.")
+
+    except Exception as error:
+        print(f"오류가 발생했습니다: {type(error).__name__}")
+        print(error)
+
+
+def main() -> None:
+    print()
+    print("=" * 50)
+    print("   나만의 자소서 도우미")
+    print("=" * 50)
+
+    print(f"모델: {MODEL_NAME}")
+    print(f"현재 스타일: {current_style_key}")
+    print("/help 로 명령어를 확인하세요.\n")
+
+    while True:
+        user_input = input("자소서 입력 > ").strip()
+
+        if not user_input:
+            continue
+
+        if user_input == "/quit":
+            print("자소서 도우미를 종료합니다.")
+            break
+
+        if user_input == "/help":
+            show_help()
+            continue
+
+        if user_input == "/style":
+            show_styles()
+            continue
+
+        if user_input.startswith("/set"):
+            change_style(user_input)
+            continue
+
+        if user_input == "/analyze":
+            run_local_analyze()
+            continue
+
+        if user_input == "/agent":
+            asyncio.run(run_agent_command())
+            continue
+
+        if user_input == "/filter":
+            run_ai_filter()
+            continue
+
+        if user_input == "/blind":
+            run_blind_check()
+            continue
+
+        if user_input.startswith("/"):
+            print(f"알 수 없는 명령어입니다: {user_input}")
+            print("/help 로 사용 가능한 명령어를 확인하세요.")
+            continue
+
+        try:
+            answer = ask_openai_once(user_input)
+            print(answer)
+
+        except Exception as error:
+            print(f"오류가 발생했습니다: {type(error).__name__}")
+            print(error)
+
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    ini_env()    
+    main()

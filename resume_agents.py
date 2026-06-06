@@ -1,7 +1,11 @@
 from agents import Agent
-from config import MODEL_NAME
-from config import ini_env
 from agents import handoff
+
+from config import MODEL_NAME
+
+from resume_tool import resume_input_guardrail
+
+
 
 revise_agent = Agent(
     name="자소서_첨삭_Specialist",
@@ -84,17 +88,17 @@ final_agent = Agent(
 
 analyze_handoff = handoff(
     agent=analyze_agent,
-    # TODO: 필요하면 tool_description_override에 분석 요청 설명을 넣어요.
+    tool_description_override="자소서 분석, ResumeAnalysis 5필드, 결함 탐지 요청에 사용합니다.",
 )
 
 revise_handoff = handoff(
     agent=revise_agent,
-    # TODO: 필요하면 tool_description_override에 첨삭 요청 설명을 넣어요.
+    tool_description_override="자소서 첨삭, STAR/PREP/CAR 기준 문장 개선 요청에 사용합니다.",
 )
 
 final_handoff = handoff(
     agent=final_agent,
-    # TODO: 필요하면 tool_description_override에 최종본 요청 설명을 넣어요.
+    tool_description_override="첨삭 결과를 반영한 제출용 자기소개서 최종본 작성 요청에 사용합니다.",
 )
 triage_agent = Agent(
     name="자소서_도우미_Specialist",
@@ -103,13 +107,13 @@ triage_agent = Agent(
 
     규칙:
     - 사용자가 자소서 분석, ResumeAnalysis, 결함 탐지를 요청하면 분석 Agent로 넘겨요.
-    - 오늘 범위 밖의 첨삭, 최종본, Guardrails 요청은 다음 시간에 다룬다고 짧게 안내해요.
+    - 사용자가 첨삭, 문장 개선, STAR, PREP, CAR 기준 수정을 요청하면 첨삭 Agent로 넘겨요.
+    - 사용자가 최종본, 제출용 문단, 완성본 작성을 요청하면 최종본 Agent로 넘겨요.
     - 날씨, 잡담, 일반 검색처럼 자소서와 관련 없는 요청은 범위 밖이라고 안내해요.
-    - 직접 긴 분석을 작성하지 말고 적합한 Specialist를 선택해요.
+    - 직접 긴 분석, 첨삭, 최종본을 작성하지 말고 적합한 Specialist를 선택해요.
     """,
     handoffs=[analyze_handoff, revise_handoff, final_handoff],
     input_guardrails=[resume_input_guardrail],
     model=MODEL_NAME,
 )
-
 
